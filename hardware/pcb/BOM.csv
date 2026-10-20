@@ -1,0 +1,9 @@
+Ref,Valor,Cantidad,Footprint,Notas
+U1A/U1B,XIAO ESP32-C6 (zocalos 1x7),2,PinSocket_1x07_P2.54mm,Opcional: solo si usas XIAO C6
+U2A/U2B,ESP32-C3 SuperMini (zocalos 1x8),2,PinSocket_1x08_P2.54mm,Opcional: solo si usas SuperMini
+U3,E07-M1101D (zocalo 2x4),1,PinSocket_2x04_P2.54mm,Modulo CC1101 433 MHz con antena SMA
+J1,Cabecera I2C 1x4,1,PinHeader_1x04_P2.54mm,Sensor de temperatura opcional
+C1,10 uF,1,C_0805_2012Metric,
+C2,100 nF,1,C_0805_2012Metric,
+-,Electrolitico 100 uF,1,-,Recomendado entre 3V3 y GND (soldado aparte)
+-,Tornillo M2 x 4 mm autorroscante,2,-,Tapa de la caja

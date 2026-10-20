@@ -1,0 +1,445 @@
+###############################################################
+#  RF CC1101 + ESP32-C3 SuperMini   -   PLANTILLA SIN DATOS PERSONALES
+#
+#  - Sin WiFi, claves ni códigos de nadie. Rellena la sección
+#    "substitutions" y, si quieres, descomenta los ejemplos del final.
+#  - Al arrancar crea su propia red (ap_ssid). Te conectas, se abre el
+#    portal (o entras en http://192.168.33.1), eliges tu WiFi y su clave,
+#    y queda guardada en el ESP.
+#  - Necesita ESPHome 2026.9 o superior (componente nativo cc1101).
+#
+#  PINES (los de la PCB con el SuperMini):
+#    SCK=GPIO4  MISO=GPIO5  MOSI=GPIO6  CS=GPIO7  GDO0=GPIO3  (GDO2=GPIO10, sin usar)
+#    I2C: SDA=GPIO0  SCL=GPIO1
+#  Estado: PROBADO en producción con la PCB.
+###############################################################
+
+substitutions:
+  # ---------- LO ÚNICO QUE NECESITAS RELLENAR ----------
+  name: rf-cc1101                    # nombre del dispositivo (se le añade un sufijo único)
+  friendly_name: "RF CC1101"         # nombre que verás en Home Assistant
+  ap_ssid: "RF-CC1101 Config"        # red WiFi que crea para configurarlo
+  ap_password: "cambia-esta-clave"   # clave de esa red (mínimo 8 caracteres): CÁMBIALA
+  wifi_power: 10dBm                  # el SuperMini lo necesita; con otras placas prueba a quitarlo
+  # ---------- PINES (por defecto, los de la PCB) ----------
+  pin_clk: GPIO4
+  pin_miso: GPIO5
+  pin_mosi: GPIO6
+  pin_cs: GPIO7
+  pin_gdo0: GPIO3                   # emisión y recepción por el mismo pin
+  pin_sda: GPIO0
+  pin_scl: GPIO1
+  pin_boot: GPIO9                   # botón BOOT: 10 s pulsado = restablecer WiFi
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  name_add_mac_suffix: true          # nombre único por dispositivo: rf-cc1101-a1b2c3
+  on_boot:
+    priority: -100
+    then:
+      - cc1101.begin_rx              # empieza escuchando
+
+esp32:
+  variant: esp32c3
+  flash_size: 4MB
+  framework:
+    type: esp-idf
+
+logger:
+
+###############################################################
+# RED Y HOME ASSISTANT
+###############################################################
+api:
+  # Opcional: cifrar la conexión con Home Assistant. Genera una clave
+  # (por ejemplo: openssl rand -base64 32), descomenta y pégala.
+  # encryption:
+  #   key: "PEGA_AQUI_TU_CLAVE"
+  reboot_timeout: 0s                 # sin reinicios automáticos mientras configuras el WiFi
+
+  # Acciones para probar códigos desde Home Assistant
+  # (Herramientas de desarrollo -> Acciones: busca "rf_raw" o "rf_rc_switch").
+  actions:
+    # Pulsos en bruto: codigo = lista de microsegundos (positivo = señal, negativo = silencio)
+    - action: rf_raw
+      variables:
+        codigo: int[]
+        veces: int
+        pausa: int                   # pausa entre repeticiones, en milisegundos
+      then:
+        - remote_transmitter.transmit_raw:
+            code: !lambda 'return codigo;'
+            repeat:
+              times: !lambda 'return veces;'
+              wait_time: !lambda 'return pausa * 1000;'
+
+    # Código binario con el protocolo rc_switch 1 (el más habitual)
+    - action: rf_rc_switch_protocolo_1
+      variables:
+        codigo_binario1: string
+        repeticiones1: int
+        espera1: int                 # milisegundos
+      then:
+        - remote_transmitter.transmit_rc_switch_raw:
+            code: !lambda 'return codigo_binario1;'
+            protocol: 1
+            repeat:
+              times: !lambda 'return repeticiones1;'
+              wait_time: !lambda 'return espera1 * 1000;'
+
+    # Código binario con el protocolo rc_switch 6
+    - action: rf_rc_switch_protocolo_6
+      variables:
+        codigo_binario: string
+        repeticiones: int
+        espera: int                  # milisegundos
+      then:
+        - remote_transmitter.transmit_rc_switch_raw:
+            code: !lambda 'return codigo_binario;'
+            protocol: 6
+            repeat:
+              times: !lambda 'return repeticiones;'
+              wait_time: !lambda 'return espera * 1000;'
+
+ota:
+  - platform: esphome
+    # password: "PON_UNA_CLAVE"      # opcional
+
+wifi:
+  # SIN ssid ni password a propósito: al arrancar crea su propia red y el
+  # portal cautivo te deja elegir tu WiFi. Si más adelante falla la conexión,
+  # la red de configuración vuelve a aparecer sola.
+  #
+  # Si prefieres escribir tu WiFi en el YAML, descomenta estas dos líneas
+  # (y crea un secrets.yaml, ver secrets.example.yaml):
+  # ssid: !secret wifi_ssid
+  # password: !secret wifi_password
+  output_power: ${wifi_power}
+  power_save_mode: none
+  reboot_timeout: 0s
+  ap:
+    ssid: ${ap_ssid}
+    password: ${ap_password}
+    manual_ip:                       # opcional; por defecto sería 192.168.4.1
+      static_ip: 192.168.33.1
+      gateway: 192.168.33.1
+      subnet: 255.255.255.0
+
+captive_portal:
+
+web_server:
+  port: 80
+  version: 3
+
+###############################################################
+# I2C (sensor de temperatura opcional)
+###############################################################
+i2c:
+  sda: ${pin_sda}
+  scl: ${pin_scl}
+  scan: true                         # muestra en el log la dirección del sensor; quítalo después
+  frequency: 100kHz
+
+###############################################################
+# SENSORES Y DIAGNÓSTICO
+###############################################################
+sensor:
+  - platform: wifi_signal
+    id: wifi_signal_db
+    name: "Intensidad señal WiFi"
+    update_interval: 60s
+
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "Señal WiFi"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    entity_category: "diagnostic"
+
+  - platform: uptime
+    id: sensor_uptime_segundos
+    name: "Uptime"
+    entity_category: "diagnostic"
+
+  - platform: debug
+    free:
+      name: "Memoria libre"
+
+  - platform: internal_temperature
+    name: "Temperatura interna"
+    update_interval: 60s
+
+  # --- Sensor de temperatura externo: descomenta SOLO el tuyo ---
+  # (revisa la dirección en el log: arranca con scan: true)
+  # - platform: aht10
+  #   variant: AHT20                 # AHT10 o AHT20 (el AHT21 también usa AHT20)
+  #   temperature:
+  #     name: "Temperatura"
+  #   humidity:
+  #     name: "Humedad"
+  #   update_interval: 60s
+  #
+  # - platform: bme280_i2c
+  #   address: 0x76                  # o 0x77
+  #   temperature:
+  #     name: "Temperatura"
+  #   humidity:
+  #     name: "Humedad"
+  #   pressure:
+  #     name: "Presión"
+  #   update_interval: 60s
+  #
+  # - platform: sht4x
+  #   address: 0x44
+  #   temperature:
+  #     name: "Temperatura"
+  #   humidity:
+  #     name: "Humedad"
+  #   update_interval: 60s
+
+debug:
+  update_interval: 60s
+
+text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "Motivo reinicio"
+
+  - platform: wifi_info
+    ip_address:
+      name: "IP"
+    ssid:
+      name: "WiFi conectado"
+
+  - platform: template
+    name: "Tiempo encendido"
+    icon: "mdi:clock-outline"
+    update_interval: 60s
+    lambda: |-
+      int total_sec = id(sensor_uptime_segundos).state;
+      int days = total_sec / 86400;
+      int hours = (total_sec % 86400) / 3600;
+      int minutes = (total_sec % 3600) / 60;
+      char buffer[50];
+      sprintf(buffer, "%d días, %d horas, %d min", days, hours, minutes);
+      return std::string(buffer);
+
+###############################################################
+# RADIO CC1101  (pin único GDO0 para emitir y recibir)
+###############################################################
+spi:
+  clk_pin: ${pin_clk}
+  miso_pin: ${pin_miso}
+  mosi_pin: ${pin_mosi}
+
+cc1101:
+  id: radio_cc1101
+  cs_pin: ${pin_cs}
+  frequency: 433.92MHz
+  filter_bandwidth: 100kHz           # menos ruido en el receptor
+  # rx_attenuation: 6dB              # si sigue habiendo ruido: 6dB, 12dB o 18dB
+
+remote_transmitter:
+  - id: transmitter0
+    pin:
+      number: ${pin_gdo0}
+      mode:
+        input: true
+        output: true
+        pullup: true
+        open_drain: true
+      allow_other_uses: true
+    eot_level: false
+    carrier_duty_percent: 100%
+    non_blocking: true
+    on_transmit:
+      then:
+        - cc1101.set_idle
+        - remote_transmitter.digital_write: false
+        - cc1101.begin_tx
+    on_complete:
+      then:
+        - cc1101.set_idle
+        - remote_transmitter.digital_write: true
+        - cc1101.begin_rx
+
+remote_receiver:
+  - id: receiver0
+    pin:
+      number: ${pin_gdo0}          # el mismo GDO0
+      mode:
+        input: true
+        output: true
+        pullup: true
+        open_drain: true
+      allow_other_uses: true
+    # --- MODO CAPTURA: descomenta para cazar los códigos de tus mandos ---
+    # dump:
+    #   - rc_switch                  # protocolo + código binario (lo ideal)
+    #   - raw                        # pulsos en bruto, si rc_switch no decodifica (genera mucho log)
+    tolerance: 50%
+    filter: 150us
+    idle: 4ms
+
+# Entidades nativas para Home Assistant
+radio_frequency:
+  - platform: ir_rf_proxy
+    name: "RF Emisor"
+    remote_transmitter_id: transmitter0
+    frequency: 433.92MHz
+
+  - platform: ir_rf_proxy
+    name: "RF Receptor"
+    remote_receiver_id: receiver0
+    frequency: 433.92MHz
+
+###############################################################
+# BOTONES Y RESTABLECER WIFI
+# Mantén pulsado el botón BOOT 10 segundos (o usa el botón de Home
+# Assistant) y vuelve a salir la red de configuración.
+###############################################################
+button:
+  - platform: restart
+    name: "Reiniciar"
+    icon: "mdi:restart"
+
+  - platform: safe_mode
+    name: "Modo seguro"
+    icon: "mdi:shield-alert"
+
+  - platform: factory_reset
+    id: factory_reset_btn
+    name: "Restablecer WiFi"
+    entity_category: "config"
+
+binary_sensor:
+  - platform: gpio
+    id: boot_btn
+    pin:
+      number: ${pin_boot}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    on_click:
+      min_length: 10s
+      max_length: 60s
+      then:
+        - button.press: factory_reset_btn
+
+###############################################################
+# EJEMPLOS PARA TUS PROPIOS MANDOS  (descomenta y rellena)
+#
+#  1) Activa  dump: rc_switch  (y raw si hace falta) arriba, pulsa tu mando
+#     cerca del módulo y copia del log el protocolo y el código de cada botón.
+#     Guía completa: docs/capturar_codigos_rf.md
+#  2) Sustituye las  xxxxx  por los códigos que hayas capturado y ajusta el
+#     protocolo (número, o pulse_length/sync/zero/one/inverted si es personalizado).
+#  3) Si tu mando NO decodifica con rc_switch, pásale los logs "raw" a Claude
+#     junto con la guía y te devolverá el protocolo adaptado.
+###############################################################
+
+# ----- Persiana por tiempo (3 botones: abrir, cerrar, parar) -----
+# cover:
+#   - platform: time_based
+#     name: "Persiana"
+#     id: persiana
+#     device_class: blind
+#     assumed_state: true
+#     has_built_in_endstop: true
+#     open_action:
+#       - remote_transmitter.transmit_rc_switch_raw:
+#           code: "xxxxxxxxxxxxxxxxxxxxxxxx"   # código ABRIR capturado (en binario, p. ej. 24 bits)
+#           protocol:                          # protocolo capturado (o:  protocol: 6)
+#             pulse_length: xxx                # duración del pulso en µs
+#             sync: [x, x]
+#             zero: [x, x]
+#             one: [x, x]
+#             inverted: false                  # true si la señal sale invertida
+#           repeat: { times: 15, wait_time: 0s }
+#     close_action:
+#       - remote_transmitter.transmit_rc_switch_raw:
+#           code: "xxxxxxxxxxxxxxxxxxxxxxxx"   # código CERRAR capturado
+#           protocol:
+#             pulse_length: xxx
+#             sync: [x, x]
+#             zero: [x, x]
+#             one: [x, x]
+#             inverted: false
+#           repeat: { times: 15, wait_time: 0s }
+#     stop_action:
+#       - remote_transmitter.transmit_rc_switch_raw:
+#           code: "xxxxxxxxxxxxxxxxxxxxxxxx"   # código PARAR capturado
+#           protocol:
+#             pulse_length: xxx
+#             sync: [x, x]
+#             zero: [x, x]
+#             one: [x, x]
+#             inverted: false
+#           repeat: { times: 15, wait_time: 0s }
+#     open_duration: 30s                       # lo que tarda en subir del todo
+#     close_duration: 30s                      # lo que tarda en bajar del todo
+#
+# ----- Escuchar el mando ORIGINAL para sincronizar el estado -----
+# (añade estas entradas a la lista binary_sensor de arriba; el protocolo/código
+#  que se recibe puede diferir del que se emite: usa lo que muestre el log)
+#   - platform: remote_receiver
+#     name: "Mando persiana - Abrir"
+#     rc_switch_raw:
+#       protocol: x                            # número de protocolo del log (o un protocolo personalizado)
+#       code: "xxxxxxxxxxxxxxxxxxxxxxxx"       # código ABRIR capturado
+#     filters:
+#       - delayed_off: 800ms
+#     on_press:
+#       - cover.open: persiana
+#   - platform: remote_receiver
+#     name: "Mando persiana - Cerrar"
+#     rc_switch_raw:
+#       protocol: x
+#       code: "xxxxxxxxxxxxxxxxxxxxxxxx"       # código CERRAR capturado
+#     filters:
+#       - delayed_off: 800ms
+#     on_press:
+#       - cover.close: persiana
+#   - platform: remote_receiver
+#     name: "Mando persiana - Parar"
+#     rc_switch_raw:
+#       protocol: x
+#       code: "xxxxxxxxxxxxxxxxxxxxxxxx"       # código PARAR capturado
+#     filters:
+#       - delayed_off: 800ms
+#     on_press:
+#       - cover.stop: persiana
+#
+# ----- Ventilador de techo y luz (un botón de Home Assistant por función) -----
+# (añade estas entradas a la lista button de arriba)
+#   - platform: template
+#     name: "Ventilador"
+#     icon: "mdi:fan"
+#     on_press:
+#       - remote_transmitter.transmit_rc_switch_raw:
+#           code: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"   # código del botón del ventilador (p. ej. 30 bits)
+#           protocol:
+#             pulse_length: xxx
+#             sync: [x, x]
+#             zero: [x, x]
+#             one: [x, x]
+#           repeat:
+#             times: 5
+#             wait_time: 0us
+#   - platform: template
+#     name: "Luz"
+#     icon: "mdi:lightbulb"
+#     on_press:
+#       - remote_transmitter.transmit_rc_switch_raw:
+#           code: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"   # código del botón de la luz
+#           protocol:
+#             pulse_length: xxx
+#             sync: [x, x]
+#             zero: [x, x]
+#             one: [x, x]
+#           repeat:
+#             times: 5
+#             wait_time: 0us
