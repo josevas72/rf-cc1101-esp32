@@ -1,0 +1,8 @@
+secrets.yaml
+.esphome/
+__pycache__/
+*.bak
+*.kicad_prl
+*-backups/
+fp-info-cache
+.DS_Store
