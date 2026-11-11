@@ -6,12 +6,107 @@ persianas, luces, enchufes o ventiladores con mando, y para escuchar el mando or
 sincronizado el estado.
 
 El repositorio incluye todo lo necesario para reproducirlo: la **placa (PCB)** en KiCad con sus
-archivos de fabricación, el **firmware** (plantilla ESPHome) y una **caja imprimible** en 3D.
+archivos de fabricación, el **firmware** (plantillas ESPHome) y una **caja imprimible** en 3D.
+
+Hay dos versiones:
+
+- **v2 (recomendada):** placa de **39 × 18 mm** y caja de **48 × 21 × 36,5 mm**. Ver abajo.
+- **v1:** la placa original de 58 × 53 mm, con cabecera I2C y caja vertical. Se puede
+  descargar tal cual en la etiqueta [`v1.0`](https://github.com/josevas72/rf-cc1101-esp32/releases/tag/v1.0).
 
 <p align="center">
   <img src="docs/img/pcb_rutado.png" alt="Rutado de la PCB" height="320">
   <img src="docs/img/caja_v4_montada.png" alt="Caja 3D montada" height="320">
 </p>
+
+## Versión 2: placa pequeña
+
+<p align="center">
+  <img src="docs/img/v2_frontal.jpg" alt="Caja v2 con la placa dentro y la antena por la tapa" height="360">
+  <img src="docs/img/v2_lateral_usb.jpg" alt="Lateral de la caja v2 con el hueco del USB-C" height="360">
+</p>
+<p align="center">
+  <img src="docs/img/v2_piezas.jpg" alt="Placa v2 montada con el SuperMini y el CC1101, caja y tapa" width="70%">
+</p>
+
+### Qué cambia respecto a la v1
+
+- Placa de **39,1 × 18,3 mm** (la v1 medía 58,4 × 53,3 mm), 2 capas, 1,6 mm, masa en las dos caras y una sola vía.
+- Vista de frente, de izquierda a derecha: **ESP32-C3 SuperMini** en horizontal con el **USB-C por el lateral
+  izquierdo**, un **electrolítico de 100 µF** entre 3V3 y GND en medio (pad cuadrado = +) y el zócalo 2×4 del
+  **E07-M1101D** con la **antena hacia arriba**.
+- Sin GDO2 (emite y recibe por GDO0), sin cabecera I2C y sin los SMD de 10 µF y 100 nF.
+- **Los GPIO son los mismos que en la v1**, así que el firmware es prácticamente el mismo.
+- Hay otra versión de la misma placa para **XIAO ESP32-C6** (38,1 × 18,3 mm, 2 zócalos 1×7).
+  Está diseñada y pasa el DRC, pero **no se ha fabricado todavía**.
+
+| Señal | C3 SuperMini | XIAO ESP32-C6 | E07-M1101D |
+|---|---|---|---|
+| SCK | GPIO4 | D8 (GPIO19) | 5 |
+| MISO | GPIO5 | D9 (GPIO20) | 7 |
+| MOSI | GPIO6 | D10 (GPIO18) | 6 |
+| CS | GPIO7 | D1 (GPIO1) | 4 |
+| GDO0 | GPIO3 | D2 (GPIO2) | 3 |
+| 3V3 / GND | 3V3 / GND | 3V3 / GND | 2 / 1 |
+
+<p align="center">
+  <img src="hardware/pcb-v2/img/supermini_delantera.png" alt="PCB v2, cara delantera" width="45%">
+  <img src="hardware/pcb-v2/img/supermini_trasera.png" alt="PCB v2, cara trasera" width="45%">
+</p>
+
+### Materiales (v2)
+
+- ESP32-C3 SuperMini y 2 zócalos hembra 1×8 de 2,54 mm.
+- Módulo CC1101 **E07-M1101D** (433 MHz) con antena SMA recta (la de las fotos mide 47 mm) y 1 zócalo hembra 2×4.
+- Condensador electrolítico de **100 µF** (Ø5 mm, paso 2 mm). Cualquier altura: no tiene nada encima.
+
+### Fabricación
+
+- SuperMini: sube `hardware/pcb-v2/fabricacion/rf_cc1101_v2_D_PCBWay.zip` a PCBWay o JLCPCB
+  (2 capas, 1,6 mm, HASL, agujero mínimo 0,4 mm).
+- XIAO C6 (sin probar): `rf_cc1101_v2_XIAO_PCBWay.zip`.
+- Proyectos KiCad: `hardware/pcb-v2/kicad/` (SuperMini) y `hardware/pcb-v2/kicad-xiao/`. Si lo modificas,
+  pulsa **B** para rellenar las zonas de masa antes del DRC.
+- `hardware/pcb-v2/generador/generador_placa_v2.py` es el script en Python que generó el diseño
+  (`python3 generador_placa_v2.py <carpeta> D` o `X`). Opcional.
+
+### Caja (v2)
+
+`hardware/caja-v2/` contiene el diseño en **OpenSCAD** (paramétrico) y los STL listos para imprimir.
+
+- Exterior **48 × 21 × 36,5 mm** con la tapa. Interior para un conjunto de 43 × 16 × 32 mm con 0,5 mm de holgura.
+- La placa va de pie. La **tuerca del SMA aprieta el módulo contra la tapa** y a la vez cierra la caja: no hace falta
+  ningún tornillo.
+- La tapa abraza la caja por fuera (ajuste 0,05 mm, probado en PLA). Si te queda floja o dura, cambia `ajuste`
+  en el `.scad`.
+- Hueco del USB-C con rebaje para la funda del cable, ranuras de ventilación, «RF» grabado en el frente y
+  huecos para 4 pies de goma.
+- La caja se imprime boca arriba y la tapa boca abajo, las dos sin soportes.
+- En el `.scad`, `part = "caja" | "tapa" | "ambas" | "montaje"`.
+
+<p align="center">
+  <img src="hardware/caja-v2/img/vista_montaje.png" alt="Vista de montaje de la caja v2 en OpenSCAD" width="45%">
+  <img src="hardware/caja-v2/img/vista_ambas.png" alt="Caja y tapa v2 en OpenSCAD" width="45%">
+</p>
+
+### Firmware (v2)
+
+- **SuperMini:** `firmware/esphome/rf-cc1101-v2-c3-supermini.yaml`. Es la plantilla de la v1 sin I2C,
+  con la potencia WiFi a 8,5 dBm y un ejemplo nuevo de **ventilador de techo con 6 velocidades** (entidad
+  `fan`). Los códigos de los ejemplos son **falsos**: captura los tuyos con `docs/capturar_codigos_rf.md`.
+- **XIAO C6:** sirve `firmware/esphome/rf-cc1101-xiao-c6.yaml` de la v1. Borra el bloque `i2c:` si no
+  lo usas.
+
+### Lecciones de la v2
+
+1. La WiFi del SuperMini es floja: cerca de un punto de acceso funciona bien, pero a −80 dBm pierde órdenes.
+   Colócalo cerca de un punto de acceso o usa el XIAO.
+2. Bajar la potencia WiFi a 8,5 dBm hace que la antena del CC1101 se sature menos.
+3. Mide el conjunto montado, con el SMA puesto, antes de diseñar la caja: los planos del módulo no bastan.
+
+---
+
+## Versión 1: placa original
 
 ## Fotos
 
@@ -43,15 +138,18 @@ y una primera prueba de encaje. Abajo: la caja impresa con la placa dentro (se v
 
 ```
 hardware/
-  pcb/
+  pcb-v2/             v2: kicad/ (SuperMini), kicad-xiao/, fabricacion/, generador/, img/
+  caja-v2/            v2: caja_rf_pequeno.scad, stl/ (caja y tapa), img/
+  pcb/                v1:
     kicad/            proyecto KiCad (.kicad_pro, .kicad_pcb, .kicad_sch)
     fabricacion/      ZIP listo para PCBWay/JLCPCB (Gerbers + taladros)
     BOM.csv           lista de materiales
     pcb_rutado.png    vista del rutado
     extras/           script Python que generó el diseño inicial (opcional)
-  caja/               caja_rf_cc1101_v4.stl (caja y tapa, listo para imprimir)
+  caja/               v1: caja_rf_cc1101_v4.stl (caja y tapa, listo para imprimir)
 firmware/
-  esphome/            rf-cc1101-c3-supermini.yaml, rf-cc1101-xiao-c6.yaml y secrets.example.yaml
+  esphome/            rf-cc1101-v2-c3-supermini.yaml (v2), rf-cc1101-c3-supermini.yaml y
+                      rf-cc1101-xiao-c6.yaml (v1) y secrets.example.yaml
 docs/
   capturar_codigos_rf.md   cómo capturar los códigos de un mando
   img/
